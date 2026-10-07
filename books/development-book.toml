@@ -1,0 +1,31 @@
+# Configuration for one GnuCash book. Select it with GNUCASH_MCP_CONFIG=books/example.toml
+# Relative paths are resolved against this file's directory.
+book_path = "../db/mcp.gnucash"
+# Open for writing even while GnuCash desktop holds the lock.
+open_if_lock = false
+# Let piecash write a timestamped backup copy before each writable open.
+do_backup = true
+# Default bank-side account for imported statement rows.
+bank_account = "Assets:Current Assets:Checking Account:Arab Bank Jordan"
+# Optional hints about this bank's statement format, added to the import prompts.
+# Claude still shows you the column mapping to confirm.
+statement_notes = '''
+Details holds the merchant name, a card reference "REF <12 digits>" (use it as
+external_id), the card transaction date and time as YY/MM/DD HH.MM.SS, and the
+transaction type such as "VISA ELECTRON PURCHASE".
+Date is the posting date, usually a day after the card date.
+CliQ rows look like "CliQ Transfer, In-<IBAN>, <transaction id>, <name>, <code>";
+use the third comma-separated part as external_id. "Out-" is money out.
+Newer exports are UTF-16 with space-separated quoted fields, amounts like "1,234.500"
+(comma thousands, 3 decimals), and Details split by commas. Card rows start with the
+type: "VISA ELECTRON PURCHASE" or "Sale Transaction", "REF <12 digits>", merchant,
+"REF-<same digits> YY/MM/DD HH.MM.SS". "Arabi Mobile - Payment", "Arabi Mobile-Payment"
+and "ArabiAccess-Transfer" rows carry an ID (MBBP-..., MACCI-..., IBGAI-...) as the
+second comma-separated part; use it as external_id.
+Cheque rows look like "INWARD CLEARING CHEQUE, <cheque number>, <drawer bank>"; use the
+cheque number as external_id, keeping its leading zeros (e.g. "000160").
+'''
+# Which date becomes the transaction date: "posting" (the statement's booking date) or
+# "transaction" (when the purchase happened, e.g. the card date in Details). Leave it
+# unset to be asked during each import; setting it keeps imports consistent.
+date_source = "posting"

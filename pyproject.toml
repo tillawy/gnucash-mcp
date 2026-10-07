@@ -1,0 +1,83 @@
+[project]
+name = "gnucash-mcp"
+version = "0.1.0"
+description = "MCP server that lets Claude import bank statements into GnuCash books"
+readme = "README.md"
+requires-python = ">=3.13"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Mohammed O. Tillawy" }]
+keywords = ["gnucash", "mcp", "model-context-protocol", "piecash", "accounting", "bank-statement"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Office/Business :: Financial :: Accounting",
+]
+dependencies = [
+    "mcp>=1.25.0,<2",  # the server uses FastMCP, renamed to MCPServer in mcp 2
+    "piecash>=1.2.1,<2",  # piecash 2.0 is planned alongside SQLAlchemy 2 support
+]
+
+[project.urls]
+Homepage = "https://github.com/tillawy/gnucash-mcp"
+Repository = "https://github.com/tillawy/gnucash-mcp"
+Issues = "https://github.com/tillawy/gnucash-mcp/issues"
+
+[project.optional-dependencies]
+# Tests, linting and type checking.
+dev = [
+    "black>=25.12.0",
+    "mypy>=1.18.0",
+    "pyright>=1.1.407",
+    "pytest>=9.0.2",
+    "ruff>=0.13.0",
+]
+# Everything the notebooks in notebooks/ import or run on.
+notebooks = [
+    "ipykernel>=7.1.0",
+    "jupyter>=1.1.1",
+    "jupyterlab>=4.2.5",
+    "marimo>=0.25.0",
+    "notebook>=7.5.1",
+    "openai>=1.57.4",
+    "pandas>=3.0.2",
+    "pandas-stubs>=2.3.3",
+    "polars>=1.44.2",
+    "python-dotenv>=1.2.1",
+]
+
+[tool.mypy]
+mypy_path = "src"
+
+[[tool.mypy.overrides]]
+module = ["piecash", "piecash.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+filterwarnings = ["ignore::sqlalchemy.exc.SAWarning"]
+
+[tool.ruff]
+extend-exclude = ["notebooks"]
+
+[project.scripts]
+gnucash-mcp = "gnucash_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "marimo>=0.25.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gnucash_storage", "src/gnucash_mcp"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "books/example.toml", "LICENSE", "README.md"]

@@ -1,0 +1,8 @@
+#!/bin/sh
+# Run the same checks as CI before every push. Enable with:
+#   git config core.hooksPath .githooks
+set -e
+uv run pytest -q
+uv run ruff check src tests
+uv run ruff format --check src tests
+uv run mypy src tests

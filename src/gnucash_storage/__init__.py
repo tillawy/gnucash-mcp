@@ -1,0 +1,46 @@
+"""Data-access layer for GnuCash books, built on piecash."""
+
+from gnucash_storage.book import (
+    AccountInfo,
+    ImportResult,
+    NewTransaction,
+    SplitInfo,
+    TransactionInfo,
+    TransactionUpdate,
+    add_transaction,
+    clone_transaction,
+    create_account,
+    delete_transaction,
+    find_duplicates,
+    find_transactions,
+    get_account,
+    import_transactions,
+    list_accounts,
+    list_transactions,
+    open_configured_book,
+    update_transaction,
+)
+from gnucash_storage.config import BookConfig, load_config
+
+__all__ = [
+    "AccountInfo",
+    "BookConfig",
+    "ImportResult",
+    "NewTransaction",
+    "SplitInfo",
+    "TransactionInfo",
+    "TransactionUpdate",
+    "add_transaction",
+    "clone_transaction",
+    "create_account",
+    "delete_transaction",
+    "find_duplicates",
+    "find_transactions",
+    "get_account",
+    "import_transactions",
+    "list_accounts",
+    "list_transactions",
+    "load_config",
+    "open_configured_book",
+    "update_transaction",
+]

@@ -1,0 +1,73 @@
+# Publish to PyPI with trusted publishing (no API token) when a GitHub release is
+# published. The release tag must be "v" plus the version in pyproject.toml, e.g. v0.1.0.
+#
+# One-time setup on PyPI (pypi.org > Your account > Publishing > Add a new pending
+# publisher): project gnucash-mcp, owner tillawy, repository gnucash-mcp, workflow
+# publish.yml, environment pypi.
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Test and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+
+      - name: Check the release tag matches the package version
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="$(uv version --short)"
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::Release tag $TAG does not match pyproject.toml version v$version"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: uv sync --locked --extra dev
+
+      - name: Test
+        run: uv run pytest -q
+
+      - name: Lint and type check
+        run: |
+          uv run ruff check src tests
+          uv run ruff format --check src tests
+          uv run mypy src tests
+
+      - name: Build
+        run: uv build
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/gnucash-mcp/
+    permissions:
+      id-token: write # lets PyPI verify this workflow instead of an API token
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2

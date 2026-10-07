@@ -1,0 +1,29 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.tillawy/gnucash-mcp",
+  "title": "GnuCash",
+  "description": "Read a GnuCash book and import bank statements into it.",
+  "repository": {
+    "url": "https://github.com/tillawy/gnucash-mcp",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "gnucash-mcp",
+      "version": "0.1.0",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "GNUCASH_MCP_CONFIG",
+          "description": "Absolute path to the TOML file that configures your GnuCash book.",
+          "isRequired": true
+        }
+      ]
+    }
+  ]
+}

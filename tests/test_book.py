@@ -577,7 +577,10 @@ def test_update_transaction_changes_fields_amount_and_counter(
         assert stored == [updated]
         assert get_account(book, "Assets:Bank").balance == Decimal("-40.50")
         assert get_account(book, "Expenses:Food").balance == Decimal(0)
-    assert (updated.post_date, updated.description) == (date(2025, 12, 1), "Test Bistro")
+    assert (updated.post_date, updated.description) == (
+        date(2025, 12, 1),
+        "Test Bistro",
+    )
     assert (updated.num, updated.notes) == ("REF1", "raw text")
     assert {(s.account, s.value) for s in updated.splits} == {
         ("Assets:Bank", Decimal("-40.50")),

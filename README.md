@@ -121,6 +121,11 @@ Tools:
   copy, call this on the guid `copy_transaction` returns.
 - `delete_transaction(guid)`: permanently delete a transaction and its splits, and
   return what was deleted.
+- `reconcile_transactions(guids | start_date/end_date, state="y", account, dry_run=True)`:
+  set the reconcile state (`y` reconciled, `c` cleared, `n` not reconciled) of an
+  account's splits, chosen by GUID or by post date range (inclusive). Only the split on
+  `account` changes. The dry run reports how many splits would change and their date
+  range. The write is saved in one go and does not need GnuCash's reconcile window.
 - `import_transactions(rows, dry_run=True)`: batch import. Each row gets a status of
   `new`, `added` or `duplicate`, and duplicates include the existing transactions they
   match.

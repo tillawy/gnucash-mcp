@@ -513,3 +513,26 @@ def test_update_and_copy_tools_change_amount_and_quantity_of_commodity_entry() -
 
     assert {s.account: s.quantity for s in updated.splits}["Assets:Gold"] == 4
     assert server.get_account("Assets:Gold").balance == Decimal(9)
+
+
+@pytest.mark.usefixtures("configured_server")
+def test_reconcile_transactions_tool_previews_then_writes() -> None:
+    preview = server.reconcile_transactions(
+        start_date=date(2025, 11, 1), end_date=date(2025, 11, 30)
+    )
+    written = server.reconcile_transactions(
+        start_date=date(2025, 11, 1), end_date=date(2025, 11, 30), dry_run=False
+    )
+    repeated = server.reconcile_transactions(
+        start_date=date(2025, 11, 1), end_date=date(2025, 11, 30), dry_run=False
+    )
+
+    assert (preview.changed, preview.written) == (1, False)
+    assert (written.changed, written.written) == (1, True)
+    assert (repeated.changed, repeated.already) == (0, 1)
+
+
+@pytest.mark.usefixtures("configured_server")
+def test_reconcile_transactions_tool_rejects_missing_selection() -> None:
+    with pytest.raises(ValueError, match="either 'guids' or a start/end"):
+        server.reconcile_transactions()

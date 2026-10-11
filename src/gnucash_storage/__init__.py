@@ -4,6 +4,9 @@ from gnucash_storage.book import (
     AccountInfo,
     ImportResult,
     NewTransaction,
+    ReconcileResult,
+    ReconcileSelection,
+    ReconcileState,
     SplitInfo,
     TransactionInfo,
     TransactionUpdate,
@@ -18,6 +21,7 @@ from gnucash_storage.book import (
     list_accounts,
     list_transactions,
     open_configured_book,
+    reconcile_transactions,
     update_transaction,
 )
 from gnucash_storage.config import BookConfig, load_config
@@ -27,6 +31,9 @@ __all__ = [
     "BookConfig",
     "ImportResult",
     "NewTransaction",
+    "ReconcileResult",
+    "ReconcileSelection",
+    "ReconcileState",
     "SplitInfo",
     "TransactionInfo",
     "TransactionUpdate",
@@ -42,5 +49,6 @@ __all__ = [
     "list_transactions",
     "load_config",
     "open_configured_book",
+    "reconcile_transactions",
     "update_transaction",
 ]

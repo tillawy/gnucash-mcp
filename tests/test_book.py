@@ -14,6 +14,9 @@ from gnucash_storage import (
     BookConfig,
     ImportResult,
     NewTransaction,
+    ReconcileResult,
+    ReconcileSelection,
+    ReconcileState,
     TransactionUpdate,
     add_transaction,
     clone_transaction,
@@ -26,6 +29,7 @@ from gnucash_storage import (
     list_accounts,
     list_transactions,
     open_configured_book,
+    reconcile_transactions,
     update_transaction,
 )
 
@@ -929,3 +933,130 @@ def test_update_counter_to_commodity_needs_quantity(
     )
 
     assert amounts["Assets:Gold"] == (Decimal(3330), Decimal(5))
+
+
+def reconcile_states(config: BookConfig) -> dict[str, tuple[str, bool]]:
+    """Map each transaction description to its bank split's state and date set."""
+    with open_configured_book(config, readonly=True) as book:
+        bank = book.accounts(fullname="Assets:Bank")
+        return {
+            split.transaction.description: (
+                split.reconcile_state,
+                split.reconcile_date is not None and split.reconcile_date.year > 1970,
+            )
+            for split in bank.splits
+        }
+
+
+def add_dated_lunches(config: BookConfig) -> list[str]:
+    """Add lunches on 1, 5 and 9 Dec 2025 and return their GUIDs in that order."""
+    add_all(
+        config,
+        *(
+            replace(LUNCH, post_date=date(2025, 12, day), description=f"LUNCH {day}")
+            for day in (1, 5, 9)
+        ),
+    )
+    with open_configured_book(config, readonly=True) as book:
+        return [
+            t.guid
+            for t in sorted(book.query(Transaction).all(), key=lambda t: t.post_date)
+        ]
+
+
+def reconcile(
+    config: BookConfig,
+    selection: ReconcileSelection,
+    state: ReconcileState = "y",
+    dry_run: bool = False,
+) -> ReconcileResult:
+    """Run ``reconcile_transactions`` on ``Assets:Bank`` in its own session."""
+    with open_configured_book(config, readonly=dry_run) as book:
+        return reconcile_transactions(book, "Assets:Bank", selection, state, dry_run)
+
+
+def test_reconcile_by_date_range_marks_only_inclusive_range(
+    book_config: BookConfig,
+) -> None:
+    add_dated_lunches(book_config)
+
+    result = reconcile(
+        book_config, ReconcileSelection(start=date(2025, 12, 1), end=date(2025, 12, 5))
+    )
+
+    assert result == ReconcileResult(
+        matched=2,
+        changed=2,
+        already=0,
+        oldest=date(2025, 12, 1),
+        newest=date(2025, 12, 5),
+        written=True,
+    )
+    assert reconcile_states(book_config) == {
+        "LUNCH 1": ("y", True),
+        "LUNCH 5": ("y", True),
+        "LUNCH 9": ("n", False),
+    }
+
+
+def test_reconcile_by_guids_changes_only_the_bank_split(
+    book_config: BookConfig,
+) -> None:
+    guids = add_dated_lunches(book_config)
+
+    reconcile(book_config, ReconcileSelection(guids=[guids[1]]))
+
+    with open_configured_book(book_config, readonly=True) as book:
+        transaction = book.query(Transaction).filter(Transaction.guid == guids[1]).one()
+        states = {s.account.fullname: s.reconcile_state for s in transaction.splits}
+    assert states == {"Assets:Bank": "y", "Expenses:Food": "n"}
+
+
+def test_reconcile_dry_run_writes_nothing(book_config: BookConfig) -> None:
+    add_dated_lunches(book_config)
+
+    result = reconcile(
+        book_config, ReconcileSelection(start=date(2025, 12, 1)), dry_run=True
+    )
+
+    assert (result.matched, result.changed, result.written) == (3, 3, False)
+    assert {state for state, _ in reconcile_states(book_config).values()} == {"n"}
+
+
+def test_reconcile_is_idempotent_and_can_be_undone(book_config: BookConfig) -> None:
+    add_dated_lunches(book_config)
+    everything = ReconcileSelection(start=date(2025, 1, 1))
+    reconcile(book_config, everything)
+
+    again = reconcile(book_config, everything)
+    undone = reconcile(book_config, everything, state="n")
+
+    assert (again.changed, again.already, again.oldest) == (0, 3, None)
+    assert undone.changed == 3
+    assert set(reconcile_states(book_config).values()) == {("n", False)}
+
+
+def test_reconcile_unknown_guid_raises_and_writes_nothing(
+    book_config: BookConfig,
+) -> None:
+    guids = add_dated_lunches(book_config)
+
+    with pytest.raises(KeyError, match="nope"):
+        reconcile(book_config, ReconcileSelection(guids=[guids[0], "nope"]))
+
+    assert {state for state, _ in reconcile_states(book_config).values()} == {"n"}
+
+
+@pytest.mark.parametrize(
+    "selection",
+    [
+        ReconcileSelection(),
+        ReconcileSelection(guids=["a"], start=date(2025, 12, 1)),
+    ],
+    ids=["neither", "both"],
+)
+def test_reconcile_needs_exactly_one_kind_of_selection(
+    book_config: BookConfig, selection: ReconcileSelection
+) -> None:
+    with pytest.raises(ValueError, match="either 'guids' or a start/end"):
+        reconcile(book_config, selection)

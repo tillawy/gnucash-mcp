@@ -4,7 +4,7 @@ from collections import defaultdict
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from itertools import islice
 from pathlib import Path
@@ -17,6 +17,7 @@ from piecash.core.account import ACCOUNT_TYPES
 from gnucash_storage.config import BookConfig
 
 type DuplicateKey = tuple[date, str, Decimal]
+type ReconcileState = Literal["n", "c", "y"]
 
 SQLITE_HEADER = b"SQLite format 3\x00"
 GZIP_MAGIC = b"\x1f\x8b"
@@ -155,6 +156,44 @@ class ImportResult:
     status: Literal["new", "added", "duplicate"]
     duplicates: list[TransactionInfo]
     duplicate_of_row: int | None
+
+
+@dataclass(frozen=True)
+class ReconcileSelection:
+    """Which transactions of an account to reconcile: given GUIDs or a date range.
+
+    Pass either ``guids`` or at least one of ``start`` and ``end``, not both.
+
+    Attributes:
+        guids: GUIDs of the transactions to select.
+        start: Earliest post date to select, inclusive.
+        end: Latest post date to select, inclusive.
+    """
+
+    guids: list[str] | None = None
+    start: date | None = None
+    end: date | None = None
+
+
+@dataclass(frozen=True)
+class ReconcileResult:
+    """Outcome of a reconcile run on one account.
+
+    Attributes:
+        matched: Splits of the account that the selection covers.
+        changed: Matched splits whose state differs from the requested one.
+        already: Matched splits that already have the requested state.
+        oldest: Earliest post date among the changed splits, if any.
+        newest: Latest post date among the changed splits, if any.
+        written: Whether the changes were saved; false for a dry run.
+    """
+
+    matched: int
+    changed: int
+    already: int
+    oldest: date | None
+    newest: date | None
+    written: bool
 
 
 def _check_sqlite_book(path: Path) -> None:
@@ -902,3 +941,72 @@ def delete_transaction(book: piecash.Book, guid: str) -> TransactionInfo:
     book.delete(transaction)
     book.save()
     return deleted
+
+
+def reconcile_transactions(
+    book: piecash.Book,
+    fullname: str,
+    selection: ReconcileSelection,
+    state: ReconcileState,
+    dry_run: bool,
+) -> ReconcileResult:
+    """Set the reconcile state of an account's splits in the selected transactions.
+
+    Only the split on ``fullname`` changes; the other splits of each transaction
+    keep their state. Reconciled splits (``y``) get the current time as reconcile
+    date, and the other states clear it. All changes are written in one save.
+
+    Args:
+        book: Book opened with ``readonly=False`` unless ``dry_run`` is true.
+        fullname: Colon-separated path of the account whose splits to change.
+        selection: The transactions to select, by GUID or by post date range.
+        state: ``n`` for not reconciled, ``c`` for cleared, ``y`` for reconciled.
+        dry_run: Only count what would change, without writing.
+
+    Returns:
+        How many splits matched, would change or already have the state.
+
+    Raises:
+        KeyError: If the account does not exist, or a GUID is not a transaction
+            with a split on the account; nothing is written.
+        ValueError: If the selection has both GUIDs and dates, or neither.
+    """
+    has_dates = selection.start is not None or selection.end is not None
+    if (selection.guids is not None) == has_dates:
+        raise ValueError("pass either 'guids' or a start/end date range, not both")
+    account = book.accounts(fullname=fullname)
+    query = (
+        book.query(Split)
+        .join(Transaction, Split.transaction_guid == Transaction.guid)
+        .filter(Split.account_guid == account.guid)
+    )
+    if selection.guids is not None:
+        query = query.filter(Transaction.guid.in_(selection.guids))
+    if selection.start is not None:
+        query = query.filter(Transaction.post_date >= selection.start)
+    if selection.end is not None:
+        query = query.filter(Transaction.post_date <= selection.end)
+    splits = query.all()
+    if selection.guids is not None:
+        missing = set(selection.guids) - {split.transaction_guid for split in splits}
+        if missing:
+            raise KeyError(f"no transaction on {fullname} with guid {sorted(missing)}")
+
+    to_change = [split for split in splits if split.reconcile_state != state]
+    if not dry_run and to_change:
+        reconcile_date = (
+            datetime.now(UTC).replace(microsecond=0) if state == "y" else None
+        )
+        for split in to_change:
+            split.reconcile_state = state
+            split.reconcile_date = reconcile_date
+        book.save()
+    changed_dates = [split.transaction.post_date for split in to_change]
+    return ReconcileResult(
+        matched=len(splits),
+        changed=len(to_change),
+        already=len(splits) - len(to_change),
+        oldest=min(changed_dates, default=None),
+        newest=max(changed_dates, default=None),
+        written=not dry_run,
+    )

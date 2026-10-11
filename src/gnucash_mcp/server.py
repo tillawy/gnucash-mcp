@@ -15,6 +15,9 @@ from gnucash_storage import (
     BookConfig,
     ImportResult,
     NewTransaction,
+    ReconcileResult,
+    ReconcileSelection,
+    ReconcileState,
     TransactionInfo,
     TransactionUpdate,
     load_config,
@@ -29,6 +32,7 @@ from gnucash_storage import get_account as storage_get_account
 from gnucash_storage import import_transactions as storage_import_transactions
 from gnucash_storage import list_accounts as storage_list_accounts
 from gnucash_storage import list_transactions as storage_list_transactions
+from gnucash_storage import reconcile_transactions as storage_reconcile_transactions
 from gnucash_storage import update_transaction as storage_update_transaction
 
 CONFIG_ENV_VAR = "GNUCASH_MCP_CONFIG"
@@ -368,6 +372,54 @@ def delete_transaction(guid: str) -> TransactionInfo:
     """
     with open_configured_book(book_config(), readonly=False) as book:
         return storage_delete_transaction(book, guid)
+
+
+@mcp.tool()
+def reconcile_transactions(
+    guids: list[str] | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    state: ReconcileState = "y",
+    account: str | None = None,
+    dry_run: bool = True,
+) -> ReconcileResult:
+    """Set the reconcile state of an account's transactions, by GUID or date range.
+
+    Select the transactions with ``guids`` (find them with ``list_transactions``)
+    or with ``start_date`` and/or ``end_date``, not both. Only the split on
+    ``account`` changes. Call with ``dry_run=True`` (the default) first, show me
+    the counts and dates, and get my confirmation before calling with
+    ``dry_run=False``. The write is saved in one go, so it also works when
+    GnuCash's own reconcile window crashes on a large account.
+
+    Args:
+        guids: GUIDs of the transactions to change.
+        start_date: Earliest post date to change, inclusive.
+        end_date: Latest post date to change, inclusive.
+        state: ``y`` reconciled (the default), ``c`` cleared or ``n`` not reconciled.
+        account: Full name of the account whose splits change; defaults to the
+            configured ``bank_account``.
+        dry_run: Only report what would change, without writing.
+
+    Returns:
+        How many splits matched, changed or already had the state, the oldest
+        and newest post dates among the changed ones, and whether they were saved.
+
+    Raises:
+        KeyError: If the account does not exist, or a GUID is not a transaction
+            with a split on the account; nothing is written.
+        ValueError: If both GUIDs and dates are given, or neither, or no account
+            is given or configured; nothing is written.
+    """
+    bank_account = resolve_account(account)
+    with open_configured_book(book_config(), readonly=dry_run) as book:
+        return storage_reconcile_transactions(
+            book,
+            bank_account,
+            ReconcileSelection(guids=guids, start=start_date, end=end_date),
+            state,
+            dry_run,
+        )
 
 
 @mcp.tool()
